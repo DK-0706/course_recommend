@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html><head><title>教师工作台</title><link rel="stylesheet" href="/static/style.css"></head>
+<body>
+<div class="container">
+    <div class="header">
+        <div class="welcome">🧑‍🏫 欢迎，{{ session.name }} 老师</div>
+        <a href="/logout" class="btn-logout">退出登录</a>
+    </div>
+    <div class="card-white">
+        <h3>📌 我的课程</h3>
+        <a href="/teacher/course/add" class="btn-sm" style="margin-bottom:15px; display:inline-block;">发布新课</a>
+        <table class="data-table">
+            <thead><tr><th>课号</th><th>课程名</th><th>学分</th><th>类型</th><th>操作</th><th>名单</th></tr></thead>
+            <tbody>
+                {% for c in courses %}
+                <tr>
+                    <td>{{ c.id }}</td><td>{{ c.name }}</td><td>{{ c.credit }}</td><td>{{ c.type }}</td>
+                    <td><a href="/teacher/course/edit/{{ c.id }}" class="btn-sm">修改</a></td>
+                    <td><a href="/teacher/course/students/{{ c.id }}" class="btn-sm">查看学生</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+</body>
+</html>

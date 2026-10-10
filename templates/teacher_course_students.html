@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html><head><title>选课学生名单</title><link rel="stylesheet" href="/static/style.css"></head>
+<body>
+<div class="card" style="max-width:800px;">
+    <h2>📋 选课学生名单</h2>
+    <div class="form-group" style="background:#f8f9ff; padding:15px; border-radius:15px; text-align:center;">
+        <strong>{{ course.name }}</strong> （课程号：{{ course.id }}）<br>
+        授课教师：{{ course.teacher }} | 学分：{{ course.credit }}
+    </div>
+    {% if students %}
+        <table class="data-table">
+            <thead><tr><th>学号</th><th>姓名</th><th>专业</th><th>年级</th></tr></thead>
+            <tbody>
+                {% for s in students %}
+                <tr><td>{{ s.id }}</td><td>{{ s.name }}</td><td>{{ s.major or '' }}</td><td>{{ s.grade or '' }}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div class="error" style="text-align:center;">😢 暂无学生选修这门课程</div>
+    {% endif %}
+    <div class="links"><a href="/teacher">← 返回我的课程</a></div>
+</div>
+</body>
+</html>

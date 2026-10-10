@@ -1,0 +1,226 @@
+/* 全局样式,清除默认内外边距，所有元素使用 border-box 盒模型 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+/* 页面主体样式：浅灰蓝背景，圆润字体，最小高度满屏，四周留白 */
+body {
+    background: #f5f7fb;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+/* 于登录/注册页面：白色背景、大圆角、阴影、固定最大宽度、居中 */
+.card {
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    max-width: 450px;
+    margin: 0 auto;
+    padding: 40px 30px;
+    text-align: center;
+}
+
+/* 通用容器：内容最大宽度1200px，水平居中 */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* 二级和三级标题：深灰色，中等粗体 */
+h2, h3 {
+    color: #333;
+    font-weight: 600;
+}
+/* 卡片内标题与下方元素间距 */
+.card h2 {
+    margin-bottom: 30px;
+}
+/* 卡片内三级标题及类 title：带蓝色左边框，左侧内边距，下边距 */
+.card h3, .card-title {
+    margin-bottom: 15px;
+    border-left: 5px solid #007bff;
+    padding-left: 15px;
+}
+
+/* 表单控件组,底部间距，文本左对齐 */
+.form-group {
+    margin-bottom: 20px;
+    text-align: left;
+}
+/* 表单标签：块级显示，下边距8px，中等粗细，灰色 */
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #555;
+}
+/* 表单输入框、文本域、下拉框：通栏、内边距、边框、圆角、字号，过渡动画 */
+.form-group input,
+.form-group textarea,
+.form-group select {
+    width: 100%;
+    padding: 12px 15px;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    font-size: 16px;
+    transition: 0.3s;
+}
+/* 输入框/文本域聚焦时：移除默认轮廓，边框变蓝，外发光 */
+.form-group input:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+/* 按钮通用样式：蓝色背景、白色文字、全宽、圆角、粗体，悬停加深并上移 */
+.btn, button {
+    background: #007bff;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 30px;
+    font-size: 16px;
+    cursor: pointer;
+    width: 100%;
+    font-weight: bold;
+    transition: 0.3s;
+}
+
+.btn:hover, button:hover {
+    background: #0056b3;
+    transform: translateY(-2px);
+}
+
+/* 小按钮：用于表格内，宽度自适应，较小内边距和圆角 */
+.btn-sm {
+    background: #007bff;
+    color: white;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: 0.2s;
+    width: auto;
+    display: inline-block;
+}
+
+.btn-sm:hover {
+    background: #0056b3;
+}
+
+/* 退出按钮：浅灰色背景，深色文字，宽度自适应，无悬停上移效果 */
+.btn-logout {
+    background: #f0f0f0;
+    color: #555;
+    padding: 8px 20px;
+    border-radius: 30px;
+    text-decoration: none;
+    transition: 0.2s;
+    width: auto;
+}
+
+.btn-logout:hover {
+    background: #e0e0e0;
+    transform: none;
+}
+
+/* 链接区域：上边距，小字号 */
+.links {
+    margin-top: 25px;
+    font-size: 14px;
+}
+/* 链接样式：蓝色，无下划线，左右间距 */
+.links a {
+    color: #007bff;
+    text-decoration: none;
+    margin: 0 10px;
+}
+
+.links a:hover {
+    text-decoration: underline;
+}
+
+/* 错误信息样式：红色文字，上边距，小字号 */
+.error {
+    color: #dc3545;
+    margin-top: 10px;
+    font-size: 14px;
+}
+
+/* 表格样式：通栏，边框合并，上边距 */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+/* 表格单元格：内边距，左对齐，底部浅灰色边框 */
+.data-table th, .data-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+/* 表头：浅灰背景，加粗，深灰色文字 */
+.data-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+    color: #555;
+}
+
+/* 推荐列表容器：flex布局，允许换行，间距15px */
+.rec-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+/* 推荐项卡片：浅蓝紫背景，圆角，内边距，弹性宽度，边框 */
+.rec-item {
+    background: #f8f9ff;
+    border-radius: 15px;
+    padding: 15px 20px;
+    flex: 1 1 200px;
+    border: 1px solid #e0e7ff;
+}
+
+/* 头部栏：白色背景，圆角，内边距，阴影，flex 水平分散对齐 */
+.header {
+    background: white;
+    border-radius: 20px;
+    padding: 20px 30px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+}
+/* 欢迎语：20px，加粗，深灰色 */
+.welcome {
+    font-size: 20px;
+    font-weight: 600;
+    color: #333;
+}
+
+/* 学生/教师主页背景：白色背景，圆角，内边距，阴影，底部间距 */
+.card-white {
+    background: white;
+    border-radius: 20px;
+    padding: 25px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    margin-bottom: 30px;
+}
+
+/* 管理员重置密码栏样式：显示为行内元素 */
+.inline-form {
+    display: inline;
+}
+/* 行内输入框：行内块，宽度自适应，右侧间距 */
+.inline-input {
+    display: inline-block;
+    width: auto;
+    margin-right: 5px;
+}

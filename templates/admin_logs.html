@@ -1,0 +1,10 @@
+<!DOCTYPE html>
+<html><head><title>系统日志</title><link rel="stylesheet" href="/static/style.css"></head>
+<body>
+<div class="card" style="max-width:800px;">
+    <h2>📄 最近异常日志</h2>
+    <pre style="background:#f8f9fa; padding:15px; border-radius:10px; overflow-x:auto;">{% for line in logs %}{{ line }}{% endfor %}</pre>
+    <div class="links"><a href="/admin">返回后台</a></div>
+</div>
+</body>
+</html>

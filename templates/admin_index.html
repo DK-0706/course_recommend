@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>管理后台</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .btn-transition { transition: all 0.2s ease; }
+        .btn-transition:hover { transform: translateY(-1px); }  /* 按钮抬起效果 */
+        .card { background: white; border-radius: 20px; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 2rem; }  /* 卡片通用样式 */
+        .table-container { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; } /* 表格样式 */
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; }  /* 表格单元格样式 */
+        th { background: #f8f9fa; font-weight: 600; }  /* 表头单元格样式 */
+        .btn-sm { background: #007bff; color: white; padding: 6px 12px; border-radius: 20px; font-size: 13px; border: none; cursor: pointer; }
+        .btn-sm-danger { background: #dc3545; }
+        .btn-sm-success { background: #28a745; }
+        .btn-sm-warning { background: #ffc107; color: #333; }
+        .btn-sm:hover { opacity: 0.9; }  /* 按钮样式 */
+        .form-inline { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 20px; background: #f9fafb; padding: 15px; border-radius: 16px; }
+        .form-group { display: flex; flex-direction: column; } /* 表单样式 */
+        .form-group label { font-size: 12px; margin-bottom: 4px; color: #555; }
+        .form-group input, .form-group select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; min-width: 140px; }
+        .form-group input:focus { outline: none; border-color: #007bff; }  /* 输入框聚焦 */
+    </style>
+</head>
+<body class="bg-gray-100 p-6">
+    <div class="max-w-7xl mx-auto">
+        <div class="flex justify-between items-center mb-6 bg-white p-4 rounded-xl shadow">
+            <h1 class="text-2xl font-bold text-gray-800">👑 管理后台</h1>
+            <div>
+                欢迎，{{ session.username }}
+                <a href="/logout" class="ml-4 text-blue-600 hover:underline">退出</a>
+            </div>
+        </div>
+
+        <!-- 学生管理卡片 -->
+        <div class="card">
+            <h2 class="text-xl font-bold mb-4">👥 学生管理</h2>
+            <div class="form-inline">
+                <div class="form-group"><label>姓名</label><input type="text" id="student_name" placeholder="姓名"></div>
+                <div class="form-group"><label>专业</label><input type="text" id="student_major" placeholder="专业"></div>
+                <div class="form-group"><label>年级</label><input type="text" id="student_grade" placeholder="年级"></div>
+                <div class="form-group"><label>密码</label><input type="text" id="student_password" placeholder="默认123456"></div>
+                <button onclick="addStudent()" class="btn-sm btn-sm-success">添加学生</button>
+            </div>
+            <!-- 学生表格 -->
+            <div class="table-container">
+                <table id="studentTable">
+                    <thead><tr><th>ID</th><th>姓名</th><th>专业</th><th>年级</th><th>操作</th></tr></thead>
+                    <tbody id="studentTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 教师管理卡片 -->
+        <div class="card">
+            <h2 class="text-xl font-bold mb-4">👨‍🏫 教师管理</h2>
+            <div class="form-inline">
+                <div class="form-group"><label>姓名</label><input type="text" id="teacher_name" placeholder="姓名"></div>
+                <div class="form-group"><label>职称</label><input type="text" id="teacher_title" placeholder="职称"></div>
+                <div class="form-group"><label>院系</label><input type="text" id="teacher_department" placeholder="院系"></div>
+                <div class="form-group"><label>密码</label><input type="text" id="teacher_password" placeholder="默认123456"></div>
+                <button onclick="addTeacher()" class="btn-sm btn-sm-success">添加教师</button>
+            </div>
+            <!-- 教师表格 -->
+            <div class="table-container">
+                <table id="teacherTable">
+                    <thead><tr><th>ID</th><th>姓名</th><th>职称</th><th>院系</th><th>操作</th></tr></thead>
+                    <tbody id="teacherTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 课程管理卡片 -->
+        <div class="card">
+            <h2 class="text-xl font-bold mb-4">📚 课程管理</h2>
+            <div class="form-inline">
+                <div class="form-group"><label>课程号</label><input type="text" id="course_id" placeholder="课程号"></div>
+                <div class="form-group"><label>课程名</label><input type="text" id="course_name" placeholder="课程名"></div>
+                <div class="form-group"><label>教师ID</label><input type="text" id="course_teacher_id" placeholder="教师ID"></div>
+                <div class="form-group"><label>学分</label><input type="text" id="course_credit" placeholder="学分"></div>
+                <div class="form-group"><label>类型</label><input type="text" id="course_type" placeholder="类型"></div>
+                <div class="form-group"><label>简介</label><input type="text" id="course_intro" placeholder="简介"></div>
+                <button onclick="addCourse()" class="btn-sm btn-sm-success">添加课程</button>
+            </div>
+            <div class="table-container">
+                <table id="courseTable">
+                    <thead><tr><th>课号</th><th>课程名</th><th>教师</th><th>学分</th><th>操作</th></tr></thead>
+                    <tbody id="courseTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 密码重置查看日志  -->
+        <div class="card">
+            <div class="flex flex-wrap justify-between items-center gap-4">
+                <div class="flex flex-wrap gap-2 items-center">
+                    <span class="font-medium">🔐 密码重置：</span>
+                    <select id="reset_type" class="border rounded px-3 py-2">
+                        <option value="student">学生</option>
+                        <option value="teacher">教师</option>
+                    </select>
+                    <input type="text" id="reset_id" placeholder="姓名" class="border rounded px-3 py-2 w-24">
+                    <input type="text" id="reset_password" placeholder="新密码" class="border rounded px-3 py-2">
+                    <button onclick="resetPassword()" class="btn-sm btn-sm-warning">重置密码</button>
+                </div>
+                <div>
+                    <a href="/admin/logs" class="btn-sm bg-gray-600 hover:bg-gray-700">📄 查看系统日志</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 通用请求函数
+        async function apiRequest(url, method, body) {
+            const opts = { method, headers: { 'X-Requested-With': 'XMLHttpRequest' } };  // 构造对象，添加自定义头，标记为AJAX
+            if (body) {  // 如果提供了body
+                opts.headers['Content-Type'] = 'application/x-www-form-urlencoded';   // 设置内容为表单编码
+                opts.body = new URLSearchParams(body);  // 将body转换为URL编码的字符串
+            }
+            const res = await fetch(url, opts);  // 发送fetch请求
+            return res.json(); // 解析JSON响应并返回
+        }
+
+        // 学生管理
+        async function loadStudents() {  // 加载学生列表
+            const res = await fetch('/api/admin/students');  // 调用API获取学生数据
+            const data = await res.json();    // 解析返回的JSON
+            const tbody = document.getElementById('studentTableBody');  // 获取表格主体
+            tbody.innerHTML = data.map(s => `
+                <tr>
+                    <td>${s.id}</td><td>${escapeHtml(s.name)}</td><td>${escapeHtml(s.major || '')}</td><td>${escapeHtml(s.grade || '')}</td>
+                    <td><button class="btn-sm btn-sm-danger" onclick="deleteItem('student', ${s.id})">删除</button></td>
+                </tr>
+            `).join('');  // 使用map遍历学生数组，生成HTML行字符串，然后join合并
+        }
+        async function addStudent() {  // 添加学生
+            const name = document.getElementById('student_name').value.trim();  // 获取表单字段值
+            if (!name) return alert('请输入姓名');
+            const major = document.getElementById('student_major').value.trim();  // 专业
+            const grade = document.getElementById('student_grade').value.trim();  // 年级
+            let password = document.getElementById('student_password').value.trim();  // 密码
+            if (password === '') password = '123456';
+            const result = await apiRequest('/admin/student/add', 'POST', { name, major, grade, password });  // 发送POST请求，携带学生信息
+            if (result.success) {
+                loadStudents();   // 重新加载学生列表，刷新表格
+                document.getElementById('student_name').value = '';
+                document.getElementById('student_major').value = '';
+                document.getElementById('student_grade').value = '';
+                document.getElementById('student_password').value = '';   // 清空表单各个输入框的值
+            } else alert('添加失败');
+        }
+
+        // 教师管理
+        async function loadTeachers() {  // 加载教师
+            const res = await fetch('/api/admin/teachers');  // 调用API获取教师数据
+            const data = await res.json();  // 解析返回的JSON
+            const tbody = document.getElementById('teacherTableBody');  // 获取表格主体
+            tbody.innerHTML = data.map(t => `
+                <tr>
+                    <td>${t.id}</td><td>${escapeHtml(t.name)}</td><td>${escapeHtml(t.title || '')}</td><td>${escapeHtml(t.department || '')}</td>
+                    <td><button class="btn-sm btn-sm-danger" onclick="deleteItem('teacher', ${t.id})">删除</button></td>
+                </tr>
+            `).join('');  // 使用map遍历教师数组，生成HTML行字符串，然后join合并
+        }
+        async function addTeacher() {  // 添加教师
+            const name = document.getElementById('teacher_name').value.trim(); // 获取表单字段值
+            if (!name) return alert('请输入姓名');
+            const title = document.getElementById('teacher_title').value.trim();   // 职称
+            const department = document.getElementById('teacher_department').value.trim();  // 院系
+            let password = document.getElementById('teacher_password').value.trim();  // 密码
+            if (password === '') password = '123456';
+            const result = await apiRequest('/admin/teacher/add', 'POST', { name, title, department, password });  // POST请求，携带教师信息
+            if (result.success) {
+                loadTeachers(); // 重新加载教师列表，刷新表格
+                document.getElementById('teacher_name').value = '';
+                document.getElementById('teacher_title').value = '';
+                document.getElementById('teacher_department').value = '';
+                document.getElementById('teacher_password').value = '';  // 清空表单中的各个输入框
+            } else alert('添加失败');
+        }
+
+        // 课程管理
+        async function loadCourses() {  // 加载课程列表
+            const res = await fetch('/api/admin/courses');    // 调用API获取课程数据
+            const data = await res.json();   // 解析返回的JSON
+            const tbody = document.getElementById('courseTableBody');  // 获取表格主体
+            tbody.innerHTML = data.map(c => `
+                <tr>
+                    <td>${c.id}</td><td>${escapeHtml(c.name)}</td><td>${escapeHtml(c.teacher || '')}</td><td>${c.credit}</td>
+                    <td><button class="btn-sm btn-sm-danger" onclick="deleteItem('course', ${c.id})">删除</button></td>
+                </tr>
+            `).join('');  // 遍历课程数据，生成表格行HTML，合并为字符串
+        }
+        async function addCourse() {  // 添加课程
+            const id = document.getElementById('course_id').value.trim();  // 获取课程号
+            if (!id) return alert('请输入课程号');
+            const name = document.getElementById('course_name').value.trim();  // 获取课程名
+            if (!name) return alert('请输入课程名');
+            const teacher_id = document.getElementById('course_teacher_id').value.trim();  // 教师id
+            const credit = document.getElementById('course_credit').value.trim(); // 学分
+            const type = document.getElementById('course_type').value.trim();  // 类型
+            const intro = document.getElementById('course_intro').value.trim();  // 简介
+            const result = await apiRequest('/admin/course/add', 'POST', { id, name, teacher_id, credit, type, intro });  // 发送POST请求，携带课程数据
+            if (result.success) {
+                loadCourses();   // 重新加载课程列表，刷新表格
+                document.getElementById('course_id').value = '';
+                document.getElementById('course_name').value = '';
+                document.getElementById('course_teacher_id').value = '';
+                document.getElementById('course_credit').value = '';
+                document.getElementById('course_type').value = '';
+                document.getElementById('course_intro').value = '';  // 清空表单中的所有输入框
+            } else alert(result.msg || '添加失败');
+        }
+
+        // 通用删除函数
+        async function deleteItem(type, id) {
+            if (!confirm(`确定删除该${type === 'student' ? '学生' : type === 'teacher' ? '教师' : '课程'}吗？`)) return;  // 确认框，提示用户确认删除
+            let url = '';
+            if (type === 'student') url = `/admin/student/delete/${id}`;
+            else if (type === 'teacher') url = `/admin/teacher/delete/${id}`;
+            else url = `/admin/course/delete/${id}`;   // 根据类型拼接对应的URL
+            const result = await apiRequest(url, 'GET');  // 发送GET请求
+            if (result.success) {
+                if (type === 'student') loadStudents();   // 刷新学生列表
+                else if (type === 'teacher') loadTeachers();  // 刷新教师列表
+                else loadCourses();    // 刷新课程列表
+            } else alert('删除失败');
+        }
+
+        // 重置密码
+        async function resetPassword() {
+            const type = document.getElementById('reset_type').value;  // 获取表单中用户选择的类型
+            const id = document.getElementById('reset_id').value.trim();  // 获取要重置密码的用户ID
+            const newPwd = document.getElementById('reset_password').value.trim();  // 获取新密码
+            if (!id) return alert('请输入ID');
+            const result = await apiRequest('/admin/reset_password', 'POST', { type, id, new_password: newPwd });   // 发送POST请求，携带类型、ID、新密码
+            if (result.success) alert('密码重置成功');
+            else alert('重置失败');
+        }
+        // 转义HTML特殊字符，防止XSS攻击
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
+        }
+        // 初始化表格
+        window.addEventListener('DOMContentLoaded', () => {
+            loadStudents();
+            loadTeachers();
+            loadCourses();
+        });
+    </script>
+</body>
+</html>

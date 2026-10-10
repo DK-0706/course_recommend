@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>选课系统 - 学生端</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 自定义过渡动画 */
+        .btn-transition { transition: all 0.2s ease; }
+        .btn-transition:hover { transform: translateY(-1px); }
+        .course-card { transition: all 0.2s; }
+    </style>
+</head>
+<body class="bg-gray-100 p-6">
+    <div class="max-w-7xl mx-auto">
+        <!-- 头部信息 -->
+        <div class="flex justify-between items-center mb-6 bg-white p-4 rounded-xl shadow">
+            <h1 class="text-2xl font-bold text-gray-800">📖 课程选课系统</h1>
+            <div class="text-gray-600">
+                欢迎，{{ session.name }}
+                <a href="/logout" class="text-blue-600 ml-4 hover:underline">退出</a>
+            </div>
+        </div>
+
+        <!-- 已选课程区域 -->
+        <div class="bg-white rounded-xl shadow p-6 mb-8">
+            <h2 class="text-xl font-bold mb-4 text-green-700 border-l-4 border-green-500 pl-3">✅ 已选课程</h2>
+            <div id="chosenContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+                {% for c in courses %}
+                    {% if session.user_id in chosen_dict and c.id in chosen_dict[session.user_id] %}
+                    <div id="course-{{ c.id }}" class="course-card p-4 border rounded-xl bg-green-50 border-green-200" data-course-id="{{ c.id }}">
+                        <div class="font-medium text-gray-800">{{ c.name }}</div>
+                        <div class="text-xs text-gray-500 mt-1">{{ c.teacher }} | {{ c.credit }}学分</div>
+                        <button onclick="chooseCourse({{ c.id }}, 'del')" class="bg-red-500 hover:bg-red-600 text-white text-sm py-1.5 px-2 rounded-lg w-full mt-3">退选</button>
+                    </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+            <div id="emptyChosenMsg" class="text-gray-400 text-center py-8 {% if chosen_dict.get(session.user_id, [])|length > 0 %}hidden{% endif %}">暂无已选课程</div>
+        </div>
+
+        <!-- 推荐课程区域 -->
+        <div class="bg-white rounded-xl shadow p-6 mb-8">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-bold text-purple-700 border-l-4 border-purple-400 pl-3">🎯 推荐课程</h2>
+                <button onclick="loadRecommendations()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-1.5 rounded-lg">🔄 刷新推荐</button>
+            </div>
+            <div id="recommendContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+                <div class="col-span-full text-center text-gray-400 py-8">加载中...</div>
+            </div>
+        </div>
+
+        <!-- 可选课程区域 -->
+        <div class="bg-white rounded-xl shadow p-6">
+            <h2 class="text-xl font-bold mb-4 text-gray-700 border-l-4 border-gray-400 pl-3">📚 可选课程</h2>
+            <div id="availableContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+                {% for c in courses %}
+                    {% if not (session.user_id in chosen_dict and c.id in chosen_dict[session.user_id]) %}
+                    <div id="course-{{ c.id }}" class="course-card p-4 border rounded-xl bg-white hover:shadow-md" data-course-id="{{ c.id }}">
+                        <div class="font-medium text-gray-800">{{ c.name }}</div>
+                        <div class="text-xs text-gray-500 mt-1">{{ c.teacher }} | {{ c.credit }}学分</div>
+                        <button onclick="chooseCourse({{ c.id }}, 'add')" class="bg-blue-600 hover:bg-blue-700 text-white text-sm py-1.5 px-2 rounded-lg w-full mt-3">选课</button>
+                    </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 页面加载后自动请求推荐
+        window.addEventListener('DOMContentLoaded', loadRecommendations);
+
+        // 获取当前已选课程的ID列表
+        function getCurrentChosenIds() {
+            const container = document.getElementById('chosenContainer');
+            const cards = container.querySelectorAll('.course-card');
+            return Array.from(cards).map(card => parseInt(card.getAttribute('data-course-id')));
+        }
+
+        // 加载推荐课程
+        async function loadRecommendations() {
+            const container = document.getElementById('recommendContainer');
+            container.innerHTML = '<div class="col-span-full text-center text-gray-400 py-8">加载中...</div>';
+            try {
+                const res = await fetch('/api/student/recommend');
+                const data = await res.json();
+                if (!data || data.length === 0) {
+                    container.innerHTML = '<div class="col-span-full text-center text-gray-500 py-8">暂无推荐，请先选几门课～</div>';
+                    return;
+                }
+                const chosenIds = getCurrentChosenIds();
+                let html = '';
+                data.forEach(c => {
+                    const isSelected = chosenIds.includes(c.id);
+                    html += `
+                        <div id="rec-course-${c.id}" class="course-card p-4 border rounded-xl bg-purple-50 border-purple-200" data-course-id="${c.id}">
+                            <div class="font-medium text-gray-800">${escapeHtml(c.name)}</div>
+                            <div class="text-xs text-gray-500 mt-1">${escapeHtml(c.teacher)} | ${c.credit}学分</div>
+                            <button onclick="chooseCourse(${c.id}, 'add')" class="mt-3 bg-blue-600 hover:bg-blue-700 text-white w-full py-1.5 rounded-lg text-sm" ${isSelected ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''}>${isSelected ? '已选' : '选课'}</button>
+                        </div>
+                    `;
+                });
+                container.innerHTML = html;
+            } catch(e) {
+                container.innerHTML = '<div class="col-span-full text-center text-red-500 py-8">加载失败，请重试</div>';
+                console.error(e);
+            }
+        }
+
+        // 更新推荐卡片中某一个课程的按钮状态
+        function updateRecommendCard(cid, toSelected) {
+            const recCard = document.getElementById(`rec-course-${cid}`);
+            if (!recCard) return;
+            const btn = recCard.querySelector('button');
+            if (toSelected) {
+                if (btn) {
+                    btn.innerText = '已选';
+                    btn.disabled = true;
+                    btn.style.opacity = '0.5';
+                    btn.style.cursor = 'not-allowed';
+                }
+            } else {
+                if (btn) {
+                    btn.innerText = '选课';
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                    btn.style.cursor = 'pointer';
+                    btn.setAttribute('onclick', `chooseCourse(${cid}, 'add')`);
+                }
+            }
+        }
+
+        // 选课/退课核心函数
+        async function chooseCourse(cid, type) {
+            const actionText = type === 'add' ? '选课' : '退课';
+            if (!confirm(`确定要${actionText}该课程吗？`)) return;
+
+            try {
+                const res = await fetch('/api/student/choose', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sid: {{ session.user_id }}, cid: cid, type: type })
+                });
+                const data = await res.json();
+                alert(data.msg);
+                if (data.msg === '操作成功') {
+                    if (type === 'add') {
+                        moveCardToChosen(cid);
+                        updateRecommendCard(cid, true);
+                    } else {
+                        moveCardToAvailable(cid);
+                        updateRecommendCard(cid, false);
+                    }
+                    updateEmptyChosenMsg();
+                }
+            } catch(err) {
+                alert('操作失败，请稍后重试');
+                console.error(err);
+            }
+        }
+
+        // 将卡片从“可选”移动到“已选”
+        function moveCardToChosen(cid) {
+            const sourceCard = document.querySelector(`#availableContainer #course-${cid}`);
+            if (!sourceCard) return;
+            sourceCard.classList.remove('bg-white', 'hover:shadow-md');
+            sourceCard.classList.add('bg-green-50', 'border-green-200');
+
+            const btn = sourceCard.querySelector('button');
+            if (btn) {
+                btn.innerText = '退选';
+                btn.setAttribute('onclick', `chooseCourse(${cid}, 'del')`);
+                btn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                btn.classList.add('bg-red-500', 'hover:bg-red-600');
+            }
+            document.getElementById('chosenContainer').appendChild(sourceCard);
+        }
+
+        // 将卡片从“已选”移回“可选”
+        function moveCardToAvailable(cid) {
+            const sourceCard = document.querySelector(`#chosenContainer #course-${cid}`);
+            if (!sourceCard) return;
+            sourceCard.classList.remove('bg-green-50', 'border-green-200');
+            sourceCard.classList.add('bg-white', 'hover:shadow-md');
+            const btn = sourceCard.querySelector('button');
+            if (btn) {
+                btn.innerText = '选课';
+                btn.setAttribute('onclick', `chooseCourse(${cid}, 'add')`);
+                btn.classList.remove('bg-red-500', 'hover:bg-red-600');
+                btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+            }
+            document.getElementById('availableContainer').appendChild(sourceCard);
+        }
+
+        // 控制“暂无已选课程”提示的显示/隐藏
+        function updateEmptyChosenMsg() {
+            const chosenContainer = document.getElementById('chosenContainer');
+            const emptyMsg = document.getElementById('emptyChosenMsg');
+            if (chosenContainer.children.length === 0) {
+                emptyMsg.classList.remove('hidden');
+            } else {
+                emptyMsg.classList.add('hidden');
+            }
+        }
+
+        // 防XSS攻击
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
+        }
+    </script>
+</body>
+</html>
