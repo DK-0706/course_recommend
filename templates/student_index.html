@@ -40,6 +40,23 @@
             <div id="emptyChosenMsg" class="text-gray-400 text-center py-8 {% if chosen_dict.get(session.user_id, [])|length > 0 %}hidden{% endif %}">暂无已选课程</div>
         </div>
 
+        <!-- 对话式推荐 -->
+        <div class="bg-white rounded-xl shadow p-6 mb-8">
+            <h2 class="text-xl font-bold mb-4 text-indigo-700 border-l-4 border-indigo-400 pl-3">💬 对话选课</h2>
+
+            <!-- 消息区 -->
+            <div id="chatMessages" class="space-y-3 mb-4 max-h-80 overflow-y-auto">
+                <div class="text-gray-400 text-sm">试试说："我想学人工智能相关的课" 或 "再换一批"</div>
+            </div>
+
+            <!-- 输入区 -->
+            <div class="flex gap-2">
+                <input id="chatInput" type="text" placeholder="说说你想学什么..."
+                       class="flex-1 border rounded-lg px-4 py-2 focus:outline-none focus:border-indigo-500"
+                       onkeydown="if(event.key==='Enter') sendChat()">
+                <button onclick="sendChat()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg">发送</button>
+            </div>
+        </div>
         <!-- 推荐课程区域 -->
         <div class="bg-white rounded-xl shadow p-6 mb-8">
             <div class="flex items-center justify-between mb-4">
@@ -77,6 +94,97 @@
             const container = document.getElementById('chosenContainer');
             const cards = container.querySelectorAll('.course-card');
             return Array.from(cards).map(card => parseInt(card.getAttribute('data-course-id')));
+        }
+
+         // ============ 对话式推荐 ============
+        let chatHistory = [];      // 多轮历史
+        let chatShownIds = [];     // 已推荐过的课程ID
+
+        async function sendChat() {
+            const input = document.getElementById('chatInput');
+            const msg = input.value.trim();
+            if (!msg) return;
+            input.value = '';
+
+            appendChatMsg('user', msg);
+            chatHistory.push({ role: 'user', content: msg });
+
+            const loadingId = appendChatMsg('assistant', '思考中...');
+
+            try {
+                const res = await fetch('/api/student/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: msg,
+                        history: chatHistory.slice(0, -1),
+                        shown_ids: chatShownIds
+                    })
+                });
+                const data = await res.json();
+
+                if (!data.success) {
+                    updateChatMsg(loadingId, '出错了：' + (data.msg || '未知错误'));
+                    return;
+                }
+
+                updateChatMsg(loadingId, data.reply);
+                chatHistory.push({ role: 'assistant', content: data.reply });
+
+                (data.courses || []).forEach(c => {
+                    if (!chatShownIds.includes(c.id)) chatShownIds.push(c.id);
+                });
+
+                renderChatCourses(data.courses || []);
+
+            } catch (e) {
+                updateChatMsg(loadingId, '网络错误，请重试');
+                console.error(e);
+            }
+        }
+
+        function appendChatMsg(role, text) {
+            const box = document.getElementById('chatMessages');
+            const id = 'msg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+            const isUser = role === 'user';
+            box.innerHTML += `
+                <div id="${id}" class="flex ${isUser ? 'justify-end' : 'justify-start'}">
+                    <div class="${isUser ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-800'} rounded-lg px-3 py-2 max-w-[80%] text-sm">
+                        ${escapeHtml(text)}
+                    </div>
+                </div>
+            `;
+            box.scrollTop = box.scrollHeight;
+            return id;
+        }
+
+        function updateChatMsg(id, text) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.querySelector('div').innerHTML = escapeHtml(text);
+                document.getElementById('chatMessages').scrollTop = 99999;
+            }
+        }
+
+        function renderChatCourses(courses) {
+            const container = document.getElementById('recommendContainer');
+            if (!courses.length) {
+                container.innerHTML = '<div class="col-span-full text-center text-gray-500 py-8">没有找到合适的课程，换个说法试试～</div>';
+                return;
+            }
+            const chosenIds = getCurrentChosenIds();
+            let html = '';
+            courses.forEach(c => {
+                const isSelected = chosenIds.includes(c.id);
+                html += `
+                    <div id="rec-course-${c.id}" class="course-card p-4 border rounded-xl bg-indigo-50 border-indigo-200" data-course-id="${c.id}">
+                        <div class="font-medium text-gray-800">${escapeHtml(c.name)}</div>
+                        <div class="text-xs text-gray-500 mt-1">${escapeHtml(c.teacher)} | ${c.credit}学分</div>
+                        <button onclick="chooseCourse(${c.id}, 'add')" class="mt-3 bg-blue-600 hover:bg-blue-700 text-white w-full py-1.5 rounded-lg text-sm" ${isSelected ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''}>${isSelected ? '已选' : '选课'}</button>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
         }
 
         // 加载推荐课程

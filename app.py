@@ -1,5 +1,6 @@
 from rec_semantic import semantic_recall
 from rec_reason import generate_reasons
+from rec_chat import chat_recommend
 from flask import Flask, render_template, jsonify, request, redirect, session, abort, Response
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
@@ -160,6 +161,26 @@ def fetch_courses(course_ids):
             result.append(course)
     return result  #异常处理
 
+@app.route('/api/student/chat', methods=['POST'])
+def api_chat():
+    data = request.get_json()
+    sid = session.get('user_id')
+    if not sid:
+        return jsonify({"success": False, "msg": "请先登录"})
+
+    message = (data.get('message') or '').strip()
+    history = data.get('history') or []      # 多轮历史
+    shown_ids = data.get('shown_ids') or []  # 已展示过的课程ID（用于"再换一批"）
+
+    if not message:
+        return jsonify({"success": False, "msg": "请输入内容"})
+
+    try:
+        result = chat_recommend(sid, message, history, shown_ids)
+        return jsonify({"success": True, **result})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "msg": f"出错了：{e}"})
 # ==================== 学生端 ====================
 @app.route("/login/student", methods=["GET", "POST"])
 def login_student():
