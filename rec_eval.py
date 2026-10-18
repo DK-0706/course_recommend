@@ -1,4 +1,4 @@
-# rec_eval.py —— 留一法评测 HitRate@K  测评脚本
+# rec_eval.py —— 留一法评测 HitRate@K 测评脚本
 import random
 from app import query_all,  cf_recall_with_score
 from rec_semantic import semantic_recall

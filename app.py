@@ -1,4 +1,5 @@
 from rec_semantic import semantic_recall
+from rec_reason import generate_reasons
 from flask import Flask, render_template, jsonify, request, redirect, session, abort, Response
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
@@ -131,7 +132,21 @@ def recommend(student_id):
         final_ids = [i for i, _ in sorted(merged.items(), key=lambda x: -x[1])][:4]
         if not final_ids:
             return fetch_courses(hot_courses(chosen_ids))
-        return fetch_courses(final_ids)
+
+        # ===== 新增：RAG 生成个性化推荐理由 =====
+        rec_courses = fetch_courses(final_ids)
+        try:
+            from rec_reason import generate_reasons
+            chosen_courses = fetch_courses(chosen_ids)
+            reasons = generate_reasons(student_id, chosen_courses, rec_courses)
+            for c in rec_courses:
+                c["reason"] = reasons.get(c["id"], "")
+        except Exception as e:
+            print("RAG 理由生成失败,降级：", e)
+            for c in rec_courses:
+                c["reason"] = f"根据你的选课记录，{c['name']}与你的学习方向匹配"
+
+        return rec_courses
     except Exception as e:
         print("推荐报错：", e)
         return []

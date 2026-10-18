@@ -1,48 +1,58 @@
-# rec_reason.py —— 用 agnes-3.0-flash 生成推荐理由
+# rec_reason.py —— 用 agnes-3.0-flash大模型生成推荐理由
 import os
 import json
-from pydantic import BaseModel, ValidationError
 from openai import OpenAI
+from pydantic import BaseModel, ValidationError
 
+# 从环境变量读配置
 client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY"),
-    base_url=os.getenv("OPENAI_BASE_URL"),
-    timeout=60.0,
+    api_key=os.environ.get("OPENAI_API_KEY"),
+    base_url=os.environ.get("OPENAI_BASE_URL"),
 )
 
-class RecItem(BaseModel):
+MODEL = os.environ.get("OPENAI_MODEL", "agnes-3.0-flash")
+
+class ReasonItem(BaseModel):
     course_id: int
     reason: str
-    confidence: float
 
-class RecResult(BaseModel):
-    items: list[RecItem]
+class ReasonList(BaseModel):
+    items: list[ReasonItem]
 
-def generate_reasons(student_profile, candidates):
-    prompt = f"""你是课程推荐助手。根据学生画像和候选课程,为每门课写一句推荐理由。
-
-学生画像：{student_profile}
-
-候选课程：
-{json.dumps(candidates, ensure_ascii=False, indent=2)}
-
-要求：
-1. 只推荐候选列表中的课程,不得新增
-2. 每门课理由不超过 20 字,具体、不空泛
-3. confidence 表示推荐把握,0~1
-4. 严格按 JSON 返回,不要任何额外文字
-"""
-    resp = client.chat.completions.create(
-        model="agnes-3.0-flash",
-        messages=[{"role": "user", "content": prompt}],
-        response_format={"type": "json_object"},
-        temperature=0.3,
+def generate_reasons(student_id, chosen_courses, rec_courses):
+    """
+    chosen_courses: [{"id":.., "name":.., "type":..}, ...]
+    rec_courses:    [{"id":.., "name":.., "type":.., "teacher":..}, ...]
+    返回: {course_id: reason}
+    """
+    chosen_text = "、".join(f"{c['name']}({c['type']})" for c in chosen_courses)
+    rec_text = "\n".join(
+        f"- id={c['id']} {c['name']}（{c['type']}，{c.get('teacher', '')}）"
+        for c in rec_courses
     )
-    raw = resp.choices[0].message.content
+
+    prompt = f"""你是一个课程推荐助手。学生已选课程：{chosen_text}。
+
+请为以下推荐课程各写一句个性化推荐理由（30字以内，说明为什么适合该学生）：
+{rec_text}
+
+严格按 JSON 输出，格式：
+{{"items": [{{"course_id": 101, "reason": "..."}}]}}
+"""
+
     try:
-        return RecResult.model_validate_json(raw)
-    except ValidationError as e:
-        print("结构化输出校验失败,降级：", e)
-        return RecResult(items=[
-            RecItem(course_id=c["id"], reason="", confidence=0.0) for c in candidates
-        ])
+        resp = client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+            temperature=0.7,
+        )
+        data = json.loads(resp.choices[0].message.content)
+        parsed = ReasonList(**data)
+        return {item.course_id: item.reason for item in parsed.items}
+    except (ValidationError, json.JSONDecodeError, Exception) as e:
+        print("RAG 生成失败,降级为模板理由：", e)
+        return {
+            c["id"]: f"根据你的选课记录，{c['name']}与你的学习方向匹配"
+            for c in rec_courses
+        }
