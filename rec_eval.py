@@ -1,49 +1,86 @@
-# rec_eval.py —— 离线评测
-import numpy as np
-from app import query_all, cf_recall_with_score, get_chosen_course_ids
+# rec_eval.py —— 留一法评测 HitRate@K  测评脚本
+import random
+from app import query_all,  cf_recall_with_score
 from rec_semantic import semantic_recall
 
-def build_eval_set(holdout_ratio=0.2):
-    # 留一法:从每个学生历史里藏起最近的部分课程
-    rows = query_all("SELECT student_id, course_id FROM choose ORDER BY student_id")
-    history = {}
+K = 4
+
+def get_user_history():
+    """返回 {student_id: [course_id, ...]}"""
+    rows = query_all("SELECT student_id, course_id FROM choose")
+    hist = {}
     for r in rows:
-        history.setdefault(r["student_id"], []).append(r["course_id"])
-    eval_set = []
-    for uid, courses in history.items():
-        if len(courses) < 3:
+        hist.setdefault(r["student_id"], []).append(r["course_id"])
+    return hist
+
+def hit_rate_at_k(rec_func, hist, k=K):
+    """留一法：每次留出一门课做测试,看推荐里有没有"""
+    hits, total = 0, 0
+    for sid, courses in hist.items():
+        if len(courses) < 2:
             continue
-        n_hold = max(1, int(len(courses) * holdout_ratio))
-        eval_set.append({"uid": uid, "train": courses[:-n_hold], "target": courses[-n_hold:]})
-    return eval_set
+        test = random.choice(courses)
+        train = [c for c in courses if c != test]
+        recs = rec_func(sid, train, k)
+        total += 1
+        if test in recs:
+            hits += 1
+    return hits / total if total else 0.0
 
-def hit_rate_at_k(recall_fn, eval_set, k=4):
-    hit = 0
-    for case in eval_set:
-        recs = [cid for cid, _ in recall_fn(case["uid"], case["train"], top_k=k)]
-        if set(recs) & set(case["target"]):
-            hit += 1
-    return hit / len(eval_set) if eval_set else 0.0
+def mrr_at_k(rec_func, hist, k=K):
+    """MRR：命中课程的排名倒数均值(排第1得1分,第2得0.5分,第4得0.25分)"""
+    total_rr, total = 0.0, 0
+    for sid, courses in hist.items():
+        if len(courses) < 2:
+            continue
+        test = random.choice(courses)
+        train = [c for c in courses if c != test]
+        recs = rec_func(sid, train, k)
+        total += 1
+        if test in recs:
+            rank = recs.index(test) + 1   # 第几位(从1开始)
+            total_rr += 1.0 / rank
+    return total_rr / total if total else 0.0
 
-def overlap_at_k(list_a, list_b, k=4):
-    a = {cid for cid, _ in list_a[:k]}
-    b = {cid for cid, _ in list_b[:k]}
-    return len(a & b) / k if k else 0.0
+def rec_cf(sid, train, k):
+    return [i for i, _ in cf_recall_with_score(sid, train, top_k=k)]
+
+def rec_sem(sid, train, k):
+    return [i for i, _ in semantic_recall(train, top_k=k)]
+
+def rec_hybrid(sid, train, k, alpha=0.5):
+    cf = cf_recall_with_score(sid, train, top_k=20)
+    sem = semantic_recall(train, top_k=20)
+
+    def norm(pairs):
+        if not pairs:
+            return {}
+        vals = [p[1] for p in pairs]
+        lo, hi = min(vals), max(vals)
+        rng = (hi - lo) or 1.0
+        return {i: (v - lo) / rng for i, v in pairs}
+
+    a, b = norm(cf), norm(sem)
+    merged = {}
+    for cid in set(a) | set(b):
+        merged[cid] = alpha * a.get(cid, 0.0) + (1 - alpha) * b.get(cid, 0.0)
+    return [i for i, _ in sorted(merged.items(), key=lambda x: -x[1])][:k]
 
 if __name__ == "__main__":
-    eval_set = build_eval_set()
-    hr_cf = hit_rate_at_k(cf_recall_with_score, eval_set)
-    hr_sem = hit_rate_at_k(
-        lambda uid, train, top_k: semantic_recall(train, top_k), eval_set
-    )
-    print(f"协同过滤 HitRate@4 = {hr_cf:.3f}")
-    print(f"语义召回 HitRate@4 = {hr_sem:.3f}")
+    random.seed(42)   # 固定随机种子,保证结果可复现
+    hist = get_user_history()
+    print(f"用户数：{len(hist)}")
 
-    ov = np.mean([
-        overlap_at_k(
-            cf_recall_with_score(c["uid"], c["train"], 4),
-            semantic_recall(c["train"], 4),
-        )
-        for c in eval_set[:20]
-    ])
-    print(f"两路召回平均重合度 = {ov:.3f}")
+    print(f"\n--- HitRate@{K} ---")
+    print(f"纯 CF      HitRate@{K} = {hit_rate_at_k(rec_cf, hist):.4f}")
+    print(f"纯语义     HitRate@{K} = {hit_rate_at_k(rec_sem, hist):.4f}")
+    for alpha in [0.3, 0.5, 0.7]:
+        hr = hit_rate_at_k(lambda s, t, k: rec_hybrid(s, t, k, alpha), hist)
+        print(f"融合 α={alpha}  HitRate@{K} = {hr:.4f}")
+
+    print(f"\n--- MRR@{K} ---")
+    print(f"纯 CF      MRR@{K} = {mrr_at_k(rec_cf, hist):.4f}")
+    print(f"纯语义     MRR@{K} = {mrr_at_k(rec_sem, hist):.4f}")
+    for alpha in [0.3, 0.5, 0.7]:
+        mrr = mrr_at_k(lambda s, t, k: rec_hybrid(s, t, k, alpha), hist)
+        print(f"融合 α={alpha}  MRR@{K} = {mrr:.4f}")

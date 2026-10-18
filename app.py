@@ -1,4 +1,4 @@
-import semantic_recall
+from rec_semantic import semantic_recall
 from flask import Flask, render_template, jsonify, request, redirect, session, abort, Response
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
@@ -7,6 +7,7 @@ from contextlib import contextmanager
 import traceback
 import csv
 import io
+
 
 app = Flask(__name__) #创建flask实例
 app.secret_key = "course_rec_2026" #密码

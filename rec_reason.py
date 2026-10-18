@@ -1,7 +1,14 @@
-# rec_reason.py —— 大模型生成推荐理由,结构化输出
+# rec_reason.py —— 用 agnes-3.0-flash 生成推荐理由
+import os
 import json
 from pydantic import BaseModel, ValidationError
-from rec_semantic import client
+from openai import OpenAI
+
+client = OpenAI(
+    api_key=os.getenv("OPENAI_API_KEY"),
+    base_url=os.getenv("OPENAI_BASE_URL"),
+    timeout=60.0,
+)
 
 class RecItem(BaseModel):
     course_id: int
@@ -26,14 +33,14 @@ def generate_reasons(student_profile, candidates):
 4. 严格按 JSON 返回,不要任何额外文字
 """
     resp = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="agnes-3.0-flash",
         messages=[{"role": "user", "content": prompt}],
-        response_format={"type": "json_object"},   # 强制 JSON
+        response_format={"type": "json_object"},
         temperature=0.3,
     )
     raw = resp.choices[0].message.content
     try:
-        return RecResult.model_validate_json(raw)   # Pydantic 二次校验
+        return RecResult.model_validate_json(raw)
     except ValidationError as e:
         print("结构化输出校验失败,降级：", e)
         return RecResult(items=[
