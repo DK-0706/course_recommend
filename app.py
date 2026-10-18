@@ -1,3 +1,4 @@
+import semantic_recall
 from flask import Flask, render_template, jsonify, request, redirect, session, abort, Response
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
@@ -56,48 +57,92 @@ def root():
     return redirect("/login/student") #自动跳转学生登录
 
 # ==================== 协同过滤 ====================
-def get_chosen_course_ids(student_id):   #获取学生已选课程id
+def get_chosen_course_ids(student_id):
     rows = query_all("SELECT course_id FROM choose WHERE student_id=%s", (student_id,))
     return [row["course_id"] for row in rows]
 
+def cf_recall_with_score(student_id, chosen_ids, top_k=10):
+    # 协同过滤召回,返回 [(course_id, score), ...]
+    records = query_all("SELECT student_id, course_id FROM choose")
+    if not records:
+        return []
+    df = pd.DataFrame(records)
+    df["val"] = 1
+    matrix = df.pivot_table(index="student_id", columns="course_id",
+                            values="val", fill_value=0)
+    if student_id not in matrix.index:
+        return []
+    sim = cosine_similarity(matrix)
+    sim_df = pd.DataFrame(sim, index=matrix.index, columns=matrix.index)
+    # 显式排除自己,不再用 [1:4] 硬编码
+    sim_series = sim_df[student_id].drop(labels=[student_id], errors="ignore")
+    sim_users = sim_series.sort_values(ascending=False).head(3).index
+
+    score_map = {}
+    for uid in sim_users:
+        w = float(sim_series[uid])          # 用相似度当权重,而非等权
+        cs = query_all("SELECT course_id FROM choose WHERE student_id=%s", (uid,))
+        for c in cs:
+            cid = c["course_id"]
+            if cid in chosen_ids:
+                continue
+            score_map[cid] = score_map.get(cid, 0.0) + w   # 加权累加
+    ranked = sorted(score_map.items(), key=lambda x: -x[1])
+    return ranked[:top_k]
+
+def hot_courses(chosen_ids, top_k=4):
+    # 热门兜底:按选课人数排序,替代 LIMIT 4
+    rows = query_all("""
+        SELECT c.id, COUNT(ch.student_id) AS cnt
+        FROM course c LEFT JOIN choose ch ON c.id = ch.course_id
+        GROUP BY c.id ORDER BY cnt DESC
+    """)
+    result = [r["id"] for r in rows if r["id"] not in chosen_ids]
+    return result[:top_k]
+
 def recommend(student_id):
     try:
-        chosen_ids = get_chosen_course_ids(student_id) #查询学生已选哪些课
+        chosen_ids = get_chosen_course_ids(student_id)
         if not chosen_ids:
-            return query_all("SELECT * FROM course LIMIT 4")  #冷启动,返回前四门课
-        records = query_all("SELECT student_id, course_id FROM choose")  #查询所有选课记录
-        if not records:
-            return query_all("SELECT * FROM course LIMIT 4")  #冷启动,返回前四门课
-        df = pd.DataFrame(records)
-        df["val"] = 1
-        matrix = df.pivot_table(index="student_id", columns="course_id", values="val", fill_value=0) #0/1矩阵
-        sim = cosine_similarity(matrix)  #计算两个学生的余弦相似度
-        sim_df = pd.DataFrame(sim, index=matrix.index, columns=matrix.index)   #列出相似度方阵
-        if student_id not in sim_df.index:
-            return query_all("SELECT * FROM course LIMIT 4")  #检查当前学生是否存在,防止意外
-        sim_users = sim_df[student_id].sort_values(ascending=False)[1:4].index  #找出最相似的三个学生id
-        all_rec_course_ids = []
-        for uid in sim_users:
-            cs = query_all("SELECT course_id FROM choose WHERE student_id=%s", (uid,))
-            all_rec_course_ids.extend([c["course_id"] for c in cs])   #收集相似学生的所有课程
-        final_ids = []
-        for cid in all_rec_course_ids:
-            if cid not in chosen_ids and cid not in final_ids:
-                final_ids.append(cid)
-        final_ids = final_ids[:4]  #过滤已选并去重
+            return fetch_courses(hot_courses(chosen_ids))   # 冷启动:热门兜底
+
+        cf_list = cf_recall_with_score(student_id, chosen_ids, top_k=20)
+        sem_list = semantic_recall(chosen_ids, top_k=20)
+
+        if not cf_list and not sem_list:
+            return fetch_courses(hot_courses(chosen_ids))
+
+        # 两路分数 min-max 归一化后加权融合
+        def norm(pairs):
+            if not pairs:
+                return {}
+            vals = [p[1] for p in pairs]
+            lo, hi = min(vals), max(vals)
+            rng = (hi - lo) or 1.0
+            return {i: (v - lo) / rng for i, v in pairs}
+
+        a, b = norm(cf_list), norm(sem_list)
+        alpha = 0.5
+        merged = {}
+        for cid in set(a) | set(b):
+            merged[cid] = alpha * a.get(cid, 0.0) + (1 - alpha) * b.get(cid, 0.0)
+
+        final_ids = [i for i, _ in sorted(merged.items(), key=lambda x: -x[1])][:4]
         if not final_ids:
-            all_courses = query_all("SELECT * FROM course")
-            result = [c for c in all_courses if c["id"] not in chosen_ids][:4]  #过滤后列表为空,返回前四门未选的
-            return result
-        result = []
-        for cid in final_ids:
-            course = query_one("SELECT * FROM course WHERE id=%s", (cid,))
-            if course:
-                result.append(course)  #根据课程id返回课程详情
-        return result
+            return fetch_courses(hot_courses(chosen_ids))
+        return fetch_courses(final_ids)
     except Exception as e:
         print("推荐报错：", e)
-        return []   #异常处理
+        return []
+
+def fetch_courses(course_ids):
+    # 按给定顺序返回课程详情,保持排序结果
+    result = []
+    for cid in course_ids:
+        course = query_one("SELECT * FROM course WHERE id=%s", (cid,))
+        if course:
+            result.append(course)
+    return result  #异常处理
 
 # ==================== 学生端 ====================
 @app.route("/login/student", methods=["GET", "POST"])
