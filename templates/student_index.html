@@ -187,7 +187,7 @@
             container.innerHTML = html;
         }
 
-        // 加载推荐课程
+         // 加载推荐课程
         async function loadRecommendations() {
             const container = document.getElementById('recommendContainer');
             container.innerHTML = '<div class="col-span-full text-center text-gray-400 py-8">加载中...</div>';
@@ -206,15 +206,45 @@
                         <div id="rec-course-${c.id}" class="course-card p-4 border rounded-xl bg-purple-50 border-purple-200" data-course-id="${c.id}">
                             <div class="font-medium text-gray-800">${escapeHtml(c.name)}</div>
                             <div class="text-xs text-gray-500 mt-1">${escapeHtml(c.teacher)} | ${c.credit}学分</div>
-                            ${c.reason ? `<div class="text-xs text-purple-700 bg-purple-100 rounded-lg px-2 py-1.5 mt-2 leading-relaxed">💡 ${escapeHtml(c.reason)}</div>` : ''}
+                            <div id="reason-${c.id}" class="text-xs text-purple-700 bg-purple-100 rounded-lg px-2 py-1.5 mt-2 leading-relaxed">💡 理由生成中...</div>
                             <button onclick="chooseCourse(${c.id}, 'add')" class="mt-3 bg-blue-600 hover:bg-blue-700 text-white w-full py-1.5 rounded-lg text-sm" ${isSelected ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''}>${isSelected ? '已选' : '选课'}</button>
                         </div>
                     `;
                 });
                 container.innerHTML = html;
+
+                // ===== 卡片已显示，异步加载理由 =====
+                loadReasons(data.map(c => c.id));
+
             } catch(e) {
                 container.innerHTML = '<div class="col-span-full text-center text-red-500 py-8">加载失败，请重试</div>';
                 console.error(e);
+            }
+        }
+
+        // 异步加载推荐理由
+        async function loadReasons(courseIds) {
+            try {
+                const res = await fetch('/api/student/reason', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ course_ids: courseIds })
+                });
+                if (!res.ok) throw new Error(`理由接口返回 ${res.status}`);
+                const reasons = await res.json();
+                courseIds.forEach(cid => {
+                    const el = document.getElementById(`reason-${cid}`);
+                    if (el) {
+                        const r = reasons[String(cid)];
+                        el.innerText = r ? `💡 ${r}` : '💡 暂无理由';
+                    }
+                });
+            } catch (e) {
+                console.error('理由加载失败', e);
+                courseIds.forEach(cid => {
+                    const el = document.getElementById(`reason-${cid}`);
+                    if (el) el.innerText = '💡 根据你的选课记录，该课程与你的学习方向匹配';
+                });
             }
         }
 

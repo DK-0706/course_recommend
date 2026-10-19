@@ -1,6 +1,7 @@
-# rec_eval.py —— 留一法评测 HitRate@K 测评脚本
+# rec_eval.py —— deterministic leave-one-out ranking evaluation
 import random
-from app import query_all,  cf_recall_with_score
+import math
+from app import query_all
 from rec_semantic import semantic_recall
 
 K = 4
@@ -13,43 +14,58 @@ def get_user_history():
         hist.setdefault(r["student_id"], []).append(r["course_id"])
     return hist
 
-def hit_rate_at_k(rec_func, hist, k=K):
-    """留一法：每次留出一门课做测试,看推荐里有没有"""
-    hits, total = 0, 0
+def make_holdout(hist, seed=42):
+    """Create one repeatable train/test split per user for fair comparisons."""
+    rng = random.Random(seed)
+    split = {}
     for sid, courses in hist.items():
-        if len(courses) < 2:
-            continue
-        test = random.choice(courses)
-        train = [c for c in courses if c != test]
-        recs = rec_func(sid, train, k)
-        total += 1
-        if test in recs:
-            hits += 1
-    return hits / total if total else 0.0
+        unique_courses = list(dict.fromkeys(courses))
+        if len(unique_courses) >= 2:
+            test = rng.choice(unique_courses)
+            split[sid] = ([cid for cid in unique_courses if cid != test], test)
+    return split
 
-def mrr_at_k(rec_func, hist, k=K):
-    """MRR：命中课程的排名倒数均值(排第1得1分,第2得0.5分,第4得0.25分)"""
-    total_rr, total = 0.0, 0
-    for sid, courses in hist.items():
-        if len(courses) < 2:
-            continue
-        test = random.choice(courses)
-        train = [c for c in courses if c != test]
-        recs = rec_func(sid, train, k)
-        total += 1
-        if test in recs:
-            rank = recs.index(test) + 1   # 第几位(从1开始)
-            total_rr += 1.0 / rank
-    return total_rr / total if total else 0.0
 
-def rec_cf(sid, train, k):
-    return [i for i, _ in cf_recall_with_score(sid, train, top_k=k)]
+def cf_from_training_data(student_id, train, hist, k):
+    """User-based CF computed only from the training interactions."""
+    import numpy as np
+
+    users = list(hist)
+    if student_id not in users:
+        return []
+    item_ids = sorted({cid for courses in hist.values() for cid in courses})
+    item_index = {cid: idx for idx, cid in enumerate(item_ids)}
+    matrix = np.zeros((len(users), len(item_ids)), dtype=float)
+    for row, uid in enumerate(users):
+        courses = train if uid == student_id else hist[uid]
+        for cid in courses:
+            matrix[row, item_index[cid]] = 1.0
+    target = matrix[users.index(student_id)]
+    target_norm = np.linalg.norm(target)
+    if not target_norm:
+        return []
+    scores = {}
+    for row, uid in enumerate(users):
+        if uid == student_id:
+            continue
+        denom = target_norm * np.linalg.norm(matrix[row])
+        similarity = float(target @ matrix[row] / denom) if denom else 0.0
+        if similarity <= 0:
+            continue
+        for cid in hist[uid]:
+            if cid not in train:
+                scores[cid] = scores.get(cid, 0.0) + similarity
+    return [cid for cid, _ in sorted(scores.items(), key=lambda pair: -pair[1])[:k]]
 
 def rec_sem(sid, train, k):
     return [i for i, _ in semantic_recall(train, top_k=k)]
 
-def rec_hybrid(sid, train, k, alpha=0.5):
-    cf = cf_recall_with_score(sid, train, top_k=20)
+
+def rec_cf(sid, train, hist, k):
+    return cf_from_training_data(sid, train, hist, k)
+
+def rec_hybrid(sid, train, hist, k, alpha=0.5):
+    cf_ids = cf_from_training_data(sid, train, hist, 20)
     sem = semantic_recall(train, top_k=20)
 
     def norm(pairs):
@@ -60,27 +76,47 @@ def rec_hybrid(sid, train, k, alpha=0.5):
         rng = (hi - lo) or 1.0
         return {i: (v - lo) / rng for i, v in pairs}
 
-    a, b = norm(cf), norm(sem)
+    a = {cid: (len(cf_ids) - index) / max(len(cf_ids), 1) for index, cid in enumerate(cf_ids)}
+    b = norm(sem)
     merged = {}
     for cid in set(a) | set(b):
         merged[cid] = alpha * a.get(cid, 0.0) + (1 - alpha) * b.get(cid, 0.0)
     return [i for i, _ in sorted(merged.items(), key=lambda x: -x[1])][:k]
 
+
+def evaluate(rec_func, split, k=K):
+    """Report HitRate, Precision, Recall, MRR, and NDCG at K."""
+    if not split:
+        return {name: 0.0 for name in ("HitRate", "Precision", "Recall", "MRR", "NDCG")}
+    hits = precision = recall = mrr = ndcg = 0.0
+    for sid, (train, target) in split.items():
+        recs = rec_func(sid, train, k)
+        hit = target in recs
+        hits += int(hit)
+        precision += int(hit) / k
+        recall += int(hit)
+        if hit:
+            rank = recs.index(target) + 1
+            mrr += 1 / rank
+            ndcg += 1 / math.log2(rank + 1)
+    count = len(split)
+    return {
+        "HitRate": hits / count,
+        "Precision": precision / count,
+        "Recall": recall / count,
+        "MRR": mrr / count,
+        "NDCG": ndcg / count,
+    }
+
 if __name__ == "__main__":
-    random.seed(42)   # 固定随机种子,保证结果可复现
     hist = get_user_history()
     print(f"用户数：{len(hist)}")
-
-    print(f"\n--- HitRate@{K} ---")
-    print(f"纯 CF      HitRate@{K} = {hit_rate_at_k(rec_cf, hist):.4f}")
-    print(f"纯语义     HitRate@{K} = {hit_rate_at_k(rec_sem, hist):.4f}")
+    split = make_holdout(hist)
+    print(f"留一法样本数：{len(split)}（固定 seed=42）")
+    print(f"纯协同过滤 @{K}: {evaluate(lambda sid, train, k: rec_cf(sid, train, hist, k), split)}")
+    print(f"纯语义 @{K}: {evaluate(lambda sid, train, k: rec_sem(sid, train, k), split)}")
     for alpha in [0.3, 0.5, 0.7]:
-        hr = hit_rate_at_k(lambda s, t, k: rec_hybrid(s, t, k, alpha), hist)
-        print(f"融合 α={alpha}  HitRate@{K} = {hr:.4f}")
-
-    print(f"\n--- MRR@{K} ---")
-    print(f"纯 CF      MRR@{K} = {mrr_at_k(rec_cf, hist):.4f}")
-    print(f"纯语义     MRR@{K} = {mrr_at_k(rec_sem, hist):.4f}")
-    for alpha in [0.3, 0.5, 0.7]:
-        mrr = mrr_at_k(lambda s, t, k: rec_hybrid(s, t, k, alpha), hist)
-        print(f"融合 α={alpha}  MRR@{K} = {mrr:.4f}")
+        metrics = evaluate(
+            lambda sid, train, k: rec_hybrid(sid, train, hist, k, alpha), split
+        )
+        print(f"混合召回 α={alpha} @{K}: {metrics}")

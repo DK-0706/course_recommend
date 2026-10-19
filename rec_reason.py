@@ -25,7 +25,7 @@ def generate_reasons(student_id, chosen_courses, rec_courses):
     rec_courses:    [{"id":.., "name":.., "type":.., "teacher":..}, ...]
     返回: {course_id: reason}
     """
-    chosen_text = "、".join(f"{c['name']}({c['type']})" for c in chosen_courses)
+    chosen_text = "、".join(f"{c['name']}({c.get('type', '')})" for c in chosen_courses)
     rec_text = "\n".join(
         f"- id={c['id']} {c['name']}（{c['type']}，{c.get('teacher', '')}）"
         for c in rec_courses
